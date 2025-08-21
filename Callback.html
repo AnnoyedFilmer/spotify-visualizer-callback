@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <body>
+    <script>
+      (function(){
+        const hash = Object.fromEntries(new URLSearchParams(location.hash.slice(1)));
+        if (hash.access_token) {
+          window.opener && window.opener.postMessage({
+            type: 'SPOTIFY_TOKEN',
+            access_token: hash.access_token,
+            expires_in: hash.expires_in || '3600'
+          }, '*');
+        }
+        document.body.textContent = 'Spotify login complete — you can close this tab.';
+      })();
+    </script>
+  </body>
+</html>
