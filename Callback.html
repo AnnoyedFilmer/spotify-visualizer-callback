@@ -1,25 +1,61 @@
-<!doctype html>
-<html><meta charset="utf-8"><title>Spotify Callback</title>
-<body style="font:14px system-ui;padding:16px">
+<!doctype html><meta charset="utf-8"><title>Spotify Callback</title>
+<style>body{font:14px system-ui;margin:24px;max-width:780px}.ok{color:#0a0}.err{color:#c00}button{padding:8px 12px;border:0;border-radius:8px;background:#6b5cff;color:#fff;cursor:pointer}</style>
+<h2 id="h">Loading…</h2><pre id="out"></pre><p id="actions"></p>
 <script>
-(function(){
-  const h=new URLSearchParams(location.hash.slice(1));
-  const at=h.get('access_token'); const exp=h.get('expires_in')||'3600'; const err=(new URLSearchParams(location.search)).get('error');
-  if(at){
-    document.body.innerHTML =
-      '<h2>Token captured</h2>'+
-      '<p>Copy this token:</p>'+
-      '<pre id="tok" style="white-space:break-spaces;background:#111;color:#0f0;padding:8px;border-radius:6px">'+at+'</pre>'+
-      '<button onclick="navigator.clipboard.writeText(document.getElementById(\'tok\').textContent)">Copy token</button>'+
-      '<p>You can close this tab.</p>';
-    try{ window.opener && window.opener.postMessage({type:'SPOTIFY_TOKEN',access_token:at,expires_in:exp},'*'); }catch(e){}
-  }else{
-    document.body.innerHTML =
-      '<h2>No access_token in URL</h2>'+
-      (err?('<p>OAuth error: <b>'+err+'</b></p>'):'')+
-      '<p>Make sure your Redirect URI in the Spotify app is exactly:<br>'+
-      '<code>https://annoyedfilmer.github.io/spotify-visualizer-callback/Callback.html</code></p>';
-  }
+const CLIENT_ID='efddb63646d44d7a9b040a4f3d17e789';
+const REDIRECT='https://annoyedfilmer.github.io/spotify-visualizer-callback/Callback.html';
+const SCOPES='user-read-playback-state user-read-currently-playing';
+const out=(...a)=>{document.getElementById('out').textContent=a.join('\n')};
+const h=document.getElementById('h'), act=document.getElementById('actions');
+function b64url(buf){return btoa(String.fromCharCode.apply(null,new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+async function sha256(str){const enc=new TextEncoder().encode(str);return await crypto.subtle.digest('SHA-256',enc)}
+function genVerifier(){const c='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';let s='';for(let i=0;i<64;i++)s+=c[Math.floor(Math.random()*c.length)];return s}
+function startPKCE(){
+  const v=genVerifier(); localStorage.setItem('sp_pkce_verifier',v);
+  sha256(v).then(hash=>{
+    const ch=b64url(hash);
+    const url='https://accounts.spotify.com/authorize?response_type=code'
+      +'&client_id='+encodeURIComponent(CLIENT_ID)
+      +'&redirect_uri='+encodeURIComponent(REDIRECT)
+      +'&scope='+encodeURIComponent(SCOPES)
+      +'&code_challenge_method=S256'
+      +'&code_challenge='+encodeURIComponent(ch)
+      +'&show_dialog=true';
+    location.href=url;
+  });
+}
+async function exchange(code){
+  const v=localStorage.getItem('sp_pkce_verifier');
+  if(!v){h.textContent='Missing code_verifier'; out('This tab must start the login (click the button below).'); showStart(); return;}
+  const body=new URLSearchParams({
+    grant_type:'authorization_code',
+    code, redirect_uri:REDIRECT, client_id:CLIENT_ID, code_verifier:v
+  });
+  try{
+    const r=await fetch('https://accounts.spotify.com/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
+    const j=await r.json();
+    if(!j.access_token){throw new Error(JSON.stringify(j))}
+    displayToken(j.access_token,j.expires_in||3600);
+  }catch(e){h.textContent='Token exchange failed'; out(String(e)); showStart();}
+}
+function displayToken(tok,ttl){
+  h.textContent='Token captured'; h.className='ok';
+  out(tok);
+  act.innerHTML='<button id="copy">Copy token</button>';
+  document.getElementById('copy').onclick=()=>navigator.clipboard.writeText(tok);
+  try{window.opener&&window.opener.postMessage({type:'SPOTIFY_TOKEN',access_token:tok,expires_in:String(ttl)},'*');}catch(e){}
+}
+function showStart(){
+  act.innerHTML='<button id="go">Start Spotify Login (PKCE)</button><p>Or if you prefer old implicit: <a href="https://accounts.spotify.com/authorize?response_type=token&client_id='+encodeURIComponent(CLIENT_ID)+'&scope='+encodeURIComponent(SCOPES)+'&redirect_uri='+encodeURIComponent(REDIRECT)+'&show_dialog=true">implicit link</a></p>';
+  document.getElementById('go').onclick=startPKCE;
+}
+(function main(){
+  const hash=new URLSearchParams(location.hash.slice(1));
+  const q=new URLSearchParams(location.search);
+  const at=hash.get('access_token'); const code=q.get('code'); const err=q.get('error');
+  if(at){displayToken(at,hash.get('expires_in')||'3600'); return;}
+  if(code){h.textContent='Exchanging code…'; exchange(code); return;}
+  if(err){h.textContent='OAuth error'; h.className='err'; out('error='+err); showStart(); return;}
+  h.textContent='No token yet'; out('Click the button below to start login.'); showStart();
 })();
 </script>
-</body></html>
