@@ -1,18 +1,25 @@
 <!doctype html>
-<html>
-  <body>
-    <script>
-      (function(){
-        const hash = Object.fromEntries(new URLSearchParams(location.hash.slice(1)));
-        if (hash.access_token) {
-          window.opener && window.opener.postMessage({
-            type: 'SPOTIFY_TOKEN',
-            access_token: hash.access_token,
-            expires_in: hash.expires_in || '3600'
-          }, '*');
-        }
-        document.body.textContent = 'Spotify login complete — you can close this tab.';
-      })();
-    </script>
-  </body>
-</html>
+<html><meta charset="utf-8"><title>Spotify Callback</title>
+<body style="font:14px system-ui;padding:16px">
+<script>
+(function(){
+  const h=new URLSearchParams(location.hash.slice(1));
+  const at=h.get('access_token'); const exp=h.get('expires_in')||'3600'; const err=(new URLSearchParams(location.search)).get('error');
+  if(at){
+    document.body.innerHTML =
+      '<h2>Token captured</h2>'+
+      '<p>Copy this token:</p>'+
+      '<pre id="tok" style="white-space:break-spaces;background:#111;color:#0f0;padding:8px;border-radius:6px">'+at+'</pre>'+
+      '<button onclick="navigator.clipboard.writeText(document.getElementById(\'tok\').textContent)">Copy token</button>'+
+      '<p>You can close this tab.</p>';
+    try{ window.opener && window.opener.postMessage({type:'SPOTIFY_TOKEN',access_token:at,expires_in:exp},'*'); }catch(e){}
+  }else{
+    document.body.innerHTML =
+      '<h2>No access_token in URL</h2>'+
+      (err?('<p>OAuth error: <b>'+err+'</b></p>'):'')+
+      '<p>Make sure your Redirect URI in the Spotify app is exactly:<br>'+
+      '<code>https://annoyedfilmer.github.io/spotify-visualizer-callback/Callback.html</code></p>';
+  }
+})();
+</script>
+</body></html>
