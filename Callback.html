@@ -1,61 +1,21 @@
-<!doctype html><meta charset="utf-8"><title>Spotify Callback</title>
-<style>body{font:14px system-ui;margin:24px;max-width:780px}.ok{color:#0a0}.err{color:#c00}button{padding:8px 12px;border:0;border-radius:8px;background:#6b5cff;color:#fff;cursor:pointer}</style>
-<h2 id="h">Loading…</h2><pre id="out"></pre><p id="actions"></p>
-<script>
-const CLIENT_ID='efddb63646d44d7a9b040a4f3d17e789';
-const REDIRECT='https://annoyedfilmer.github.io/spotify-visualizer-callback/Callback.html';
-const SCOPES='user-read-playback-state user-read-currently-playing';
-const out=(...a)=>{document.getElementById('out').textContent=a.join('\n')};
-const h=document.getElementById('h'), act=document.getElementById('actions');
-function b64url(buf){return btoa(String.fromCharCode.apply(null,new Uint8Array(buf))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
-async function sha256(str){const enc=new TextEncoder().encode(str);return await crypto.subtle.digest('SHA-256',enc)}
-function genVerifier(){const c='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';let s='';for(let i=0;i<64;i++)s+=c[Math.floor(Math.random()*c.length)];return s}
-function startPKCE(){
-  const v=genVerifier(); localStorage.setItem('sp_pkce_verifier',v);
-  sha256(v).then(hash=>{
-    const ch=b64url(hash);
-    const url='https://accounts.spotify.com/authorize?response_type=code'
-      +'&client_id='+encodeURIComponent(CLIENT_ID)
-      +'&redirect_uri='+encodeURIComponent(REDIRECT)
-      +'&scope='+encodeURIComponent(SCOPES)
-      +'&code_challenge_method=S256'
-      +'&code_challenge='+encodeURIComponent(ch)
-      +'&show_dialog=true';
-    location.href=url;
-  });
-}
-async function exchange(code){
-  const v=localStorage.getItem('sp_pkce_verifier');
-  if(!v){h.textContent='Missing code_verifier'; out('This tab must start the login (click the button below).'); showStart(); return;}
-  const body=new URLSearchParams({
-    grant_type:'authorization_code',
-    code, redirect_uri:REDIRECT, client_id:CLIENT_ID, code_verifier:v
-  });
-  try{
-    const r=await fetch('https://accounts.spotify.com/api/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
-    const j=await r.json();
-    if(!j.access_token){throw new Error(JSON.stringify(j))}
-    displayToken(j.access_token,j.expires_in||3600);
-  }catch(e){h.textContent='Token exchange failed'; out(String(e)); showStart();}
-}
-function displayToken(tok,ttl){
-  h.textContent='Token captured'; h.className='ok';
-  out(tok);
-  act.innerHTML='<button id="copy">Copy token</button>';
-  document.getElementById('copy').onclick=()=>navigator.clipboard.writeText(tok);
-  try{window.opener&&window.opener.postMessage({type:'SPOTIFY_TOKEN',access_token:tok,expires_in:String(ttl)},'*');}catch(e){}
-}
-function showStart(){
-  act.innerHTML='<button id="go">Start Spotify Login (PKCE)</button><p>Or if you prefer old implicit: <a href="https://accounts.spotify.com/authorize?response_type=token&client_id='+encodeURIComponent(CLIENT_ID)+'&scope='+encodeURIComponent(SCOPES)+'&redirect_uri='+encodeURIComponent(REDIRECT)+'&show_dialog=true">implicit link</a></p>';
-  document.getElementById('go').onclick=startPKCE;
-}
-(function main(){
-  const hash=new URLSearchParams(location.hash.slice(1));
-  const q=new URLSearchParams(location.search);
-  const at=hash.get('access_token'); const code=q.get('code'); const err=q.get('error');
-  if(at){displayToken(at,hash.get('expires_in')||'3600'); return;}
-  if(code){h.textContent='Exchanging code…'; exchange(code); return;}
-  if(err){h.textContent='OAuth error'; h.className='err'; out('error='+err); showStart(); return;}
-  h.textContent='No token yet'; out('Click the button below to start login.'); showStart();
-})();
-</script>
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Spotify Redirect</title></head>
+  <body>
+    <script>
+      // Forward the hash with access_token back to the opener, then close.
+      (function () {
+        try {
+          if (window.opener) {
+            window.opener.postMessage(
+              { source: 'spotify-oauth-implicit', hash: window.location.hash },
+              '*'
+            );
+          }
+        } catch (e) {}
+        setTimeout(() => window.close(), 200);
+      })();
+    </script>
+    Redirect complete… you can close this window.
+  </body>
+</html>
